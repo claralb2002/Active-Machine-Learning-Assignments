@@ -1,4 +1,5 @@
 import torch
+from PIL import Image
 
 class DatasetClassifier(torch.utils.data.Dataset):
     def __init__(self, df, transform=None):
