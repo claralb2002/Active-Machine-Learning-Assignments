@@ -8,7 +8,7 @@ def create_dataset(base_directory, categories):
         directory = os.path.join(base_directory, category, "images")
         if os.path.exists(directory):
             for image_name in os.listdir(directory):
-                image_path = os.path.join("archive", category, "images", image_name)
+                image_path = os.path.join("data","archive", category, "images", image_name)
                 if os.path.isfile(os.path.join(directory, image_name)):  # Ensures it's a file
                     data.append([category, image_name, image_path])
     
