@@ -17,4 +17,4 @@ class DatasetClassifier(torch.utils.data.Dataset):
         if self.transform:
             image = self.transform(image)
 
-        return image, label
+        return image, torch.tensor(label, dtype=torch.long)
