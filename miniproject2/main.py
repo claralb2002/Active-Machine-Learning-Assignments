@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, Subset
 
 # modules
 from modules.networks import SimpleResNet
-from modules.data_class import DatasetClassifier
+from modules.data_classifier import DatasetClassifier
 from modules.dataloader import get_bootstrapped_dataloader
 
 
