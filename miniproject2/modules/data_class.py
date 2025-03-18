@@ -10,11 +10,11 @@ class DatasetClassifier(torch.utils.data.Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        image_path = self.df.iloc[idx]['image_path']
-        label = self.df.iloc[idx]['label']
+        image_path = self.df.iloc[idx]['Image_Path']
+        label = self.df.iloc[idx]['Label']
         image = Image.open(image_path).convert('RGB')
 
         if self.transform:
             image = self.transform(image)
 
-        return image, label
+        return image, torch.tensor(label, dtype=torch.long)
