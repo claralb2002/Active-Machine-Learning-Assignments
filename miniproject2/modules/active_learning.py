@@ -7,9 +7,40 @@ from torch.utils.data import DataLoader, Subset
 from modules.networks import SimpleResNet
 from modules.dataloader import get_bootstrapped_dataloader
 
-def train_committee(dataset, labeled_indices, committee_size, batch_size, epochs, device):
+def evaluate_on_test_set(dataset, test_indices, committee, batch_size, device):
+    """ Evaluates the trained committee on the held-out test set after each AL round. """
+    print("\nEvaluating Committee on Held-Out Test Set...")
+
+    test_subset = Subset(dataset, test_indices)
+    test_loader = DataLoader(test_subset, batch_size=batch_size, shuffle=False)
+
+    total_correct = 0
+    total_samples = 0
+
+    for model in committee:
+        model.eval()
+
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+
+            # Get predictions from all committee members
+            committee_outputs = [model(images) for model in committee]
+            avg_output = torch.mean(torch.stack(committee_outputs), dim=0)  # Average over committee
+
+            # Compute final predictions
+            _, predicted = torch.max(avg_output, 1)
+            total_correct += (predicted == labels).sum().item()
+            total_samples += labels.size(0)
+
+    test_accuracy = (total_correct / total_samples) * 100
+    print(f"Test Set Accuracy: {test_accuracy:.2f}%")
+    return test_accuracy
+
+
+def train_committee(dataset, labeled_indices, committee_size, batch_size, epochs, device, num_classes):
     """ Trains a committee of models on the labeled dataset and returns the trained models with final accuracy. """
-    committee = [SimpleResNet(num_classes=NUM_CLASSES).to(device) for _ in range(committee_size)]
+    committee = [SimpleResNet(num_classes=num_classes).to(device) for _ in range(committee_size)]
     print(f"Initialized {committee_size} committee models.")
 
     final_accuracies = []
@@ -62,13 +93,20 @@ def train_committee(dataset, labeled_indices, committee_size, batch_size, epochs
     return committee, avg_committee_accuracy
 
 
-def active_learning_loop(dataset, labeled_indices, unlabeled_indices, al_rounds, query_size, committee_size, batch_size, epochs, device):
+def active_learning_loop(dataset, labeled_indices, unlabeled_indices, test_indices, al_rounds, query_size, committee_size, batch_size, epochs, device, num_classes):
     """ Runs Active Learning for a given number of rounds, training a committee and selecting uncertain samples. """
+    
+    test_accuracies = []  # Store test set accuracy over rounds
+
     for round in range(al_rounds):
         print(f"\n===== Active Learning Round {round+1}/{al_rounds} =====")
         
         # Train Committee
-        committee, committee_accuracy = train_committee(dataset, labeled_indices, committee_size, batch_size, epochs, device)
+        committee, committee_accuracy = train_committee(dataset, labeled_indices, committee_size, batch_size, epochs, device, num_classes)
+
+        # Evaluate on held-out test set
+        test_accuracy = evaluate_on_test_set(dataset, test_indices, committee, batch_size, device)
+        test_accuracies.append(test_accuracy)
 
         # Uncertainty Estimation (Variance-based QBC)
         print("\nEstimating uncertainty...")
@@ -105,4 +143,4 @@ def active_learning_loop(dataset, labeled_indices, unlabeled_indices, al_rounds,
             print("No more unlabeled data left. Stopping Active Learning.")
             break
     
-    return labeled_indices, unlabeled_indices  # Return updated indices for further analysis
+    return labeled_indices, unlabeled_indices, committee, test_accuracies  # Return final results

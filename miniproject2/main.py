@@ -23,6 +23,7 @@ EPOCHS = 5
 QUERY_SIZE = 500
 AL_ROUNDS = 5 
 COMMITTEE_SIZE = 3 
+TEST_SET_RATIO = 0.1 
 ######################
 
 
@@ -43,11 +44,18 @@ num_samples = len(dataset)
 unlabeled_indices = list(range(num_samples))
 random.shuffle(unlabeled_indices)
 
+test_set_size = int(num_samples * TEST_SET_RATIO)
+test_indices = unlabeled_indices[:test_set_size]  # Reserve test samples
+unlabeled_indices = unlabeled_indices[test_set_size:]  # Remove test samples from the pool
+
 labeled_indices = unlabeled_indices[:INITIAL_LABELS]
 unlabeled_indices = unlabeled_indices[INITIAL_LABELS:]
 
 print(f"Total samples: {num_samples}")
+print(f"Test set size (held-out): {len(test_indices)}")
 print(f"Initially labeled samples: {len(labeled_indices)}")
 print(f"Initially unlabeled samples: {len(unlabeled_indices)}")
 
-labeled_indices, unlabeled_indices = active_learning_loop(dataset, labeled_indices, unlabeled_indices, AL_ROUNDS, QUERY_SIZE, COMMITTEE_SIZE, BATCH_SIZE, EPOCHS, device)
+labeled_indices, unlabeled_indices, trained_committee, test_accuracies = active_learning_loop(
+    dataset, labeled_indices, unlabeled_indices, test_indices, AL_ROUNDS, QUERY_SIZE, COMMITTEE_SIZE, BATCH_SIZE, EPOCHS, device, NUM_CLASSES
+)
