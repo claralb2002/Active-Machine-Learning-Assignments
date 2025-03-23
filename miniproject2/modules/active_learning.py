@@ -90,57 +90,5 @@ def train_committee(dataset, labeled_indices, committee_size, batch_size, epochs
 
     avg_committee_accuracy = np.mean(final_accuracies)
     print(f"\nFinal Committee Accuracy: {avg_committee_accuracy:.2f}%")
+    
     return committee, avg_committee_accuracy
-
-
-def active_learning_loop(dataset, labeled_indices, unlabeled_indices, test_indices, al_rounds, query_size, committee_size, batch_size, epochs, device, num_classes):
-    """ Runs Active Learning for a given number of rounds, training a committee and selecting uncertain samples. """
-    
-    test_accuracies = []  # Store test set accuracy over rounds
-
-    for round in range(al_rounds):
-        print(f"\n===== Active Learning Round {round+1}/{al_rounds} =====")
-        
-        # Train Committee
-        committee, committee_accuracy = train_committee(dataset, labeled_indices, committee_size, batch_size, epochs, device, num_classes)
-
-        # Evaluate on held-out test set
-        test_accuracy = evaluate_on_test_set(dataset, test_indices, committee, batch_size, device)
-        test_accuracies.append(test_accuracy)
-
-        # Uncertainty Estimation (Variance-based QBC)
-        print("\nEstimating uncertainty...")
-        uncertain_samples = []
-        unlabeled_subset = Subset(dataset, unlabeled_indices)
-        unlabeled_loader = DataLoader(unlabeled_subset, batch_size=batch_size, shuffle=False)
-        
-        for model in committee:
-            model.eval()
-        
-        with torch.no_grad():
-            for batch_idx, (images, _) in enumerate(unlabeled_loader):
-                images = images.to(device)
-                committee_outputs = [torch.softmax(model(images), dim=1).cpu().numpy() for model in committee]
-                committee_outputs = np.array(committee_outputs)  # Shape: (committee_size, batch_size, num_classes)
-                variance = np.var(committee_outputs, axis=0).sum(axis=1)  # Compute variance across models
-                uncertain_samples.extend(zip(unlabeled_indices[:len(variance)], variance))
-
-        # Print top uncertain samples
-        print(f"Top 5 most uncertain sample variances: {sorted([x[1] for x in uncertain_samples], reverse=True)[:5]}")
-
-        # Select most uncertain samples
-        uncertain_samples.sort(key=lambda x: x[1], reverse=True)  # Sort by highest uncertainty
-        selected_samples = [x[0] for x in uncertain_samples[:query_size]]
-        
-        # Update labeled and unlabeled indices
-        labeled_indices.extend(selected_samples)
-        unlabeled_indices = [idx for idx in unlabeled_indices if idx not in selected_samples]
-        
-        print(f"Added {len(selected_samples)} most uncertain samples to training set.")
-        print(f"Total labeled samples: {len(labeled_indices)}, Remaining unlabeled samples: {len(unlabeled_indices)}")
-
-        if not unlabeled_indices:
-            print("No more unlabeled data left. Stopping Active Learning.")
-            break
-    
-    return labeled_indices, unlabeled_indices, committee, test_accuracies  # Return final results
