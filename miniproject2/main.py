@@ -12,17 +12,20 @@ from torch.utils.data import DataLoader, Subset
 from modules.networks import SimpleResNet
 from modules.data_classifier import DatasetClassifier
 from modules.dataloader import get_bootstrapped_dataloader
+from modules.active_learning import evaluate_on_test_set, train_committee
 
 
 ##### PARAMETERS #####
 NUM_CLASSES = 4
-INITIAL_LABELS = 100
+INITIAL_LABELS = 1000
 BATCH_SIZE = 32
 EPOCHS = 5 
-QUERY_SIZE = 50 
+QUERY_SIZE = 500
 AL_ROUNDS = 5 
 COMMITTEE_SIZE = 3 
+TEST_SET_RATIO = 0.1 
 ######################
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -41,69 +44,30 @@ num_samples = len(dataset)
 unlabeled_indices = list(range(num_samples))
 random.shuffle(unlabeled_indices)
 
+test_set_size = int(num_samples * TEST_SET_RATIO)
+test_indices = unlabeled_indices[:test_set_size]  # Reserve test samples
+unlabeled_indices = unlabeled_indices[test_set_size:]  # Remove test samples from the pool
+
 labeled_indices = unlabeled_indices[:INITIAL_LABELS]
 unlabeled_indices = unlabeled_indices[INITIAL_LABELS:]
 
 print(f"Total samples: {num_samples}")
+print(f"Test set size (held-out): {len(test_indices)}")
 print(f"Initially labeled samples: {len(labeled_indices)}")
 print(f"Initially unlabeled samples: {len(unlabeled_indices)}")
 
-# ACTIVE LEARNING LOOP
+
+test_accuracies = []  # Store test set accuracy over rounds
+
 for round in range(AL_ROUNDS):
     print(f"\n===== Active Learning Round {round+1}/{AL_ROUNDS} =====")
     
-    # Train Committee with Bootstrapping
-    committee = [SimpleResNet(num_classes=NUM_CLASSES).to(device) for _ in range(COMMITTEE_SIZE)]
-    print(f"Initialized {COMMITTEE_SIZE} committee models.")
+    # Train Committee
+    committee, committee_accuracy = train_committee(dataset, labeled_indices, COMMITTEE_SIZE, BATCH_SIZE, EPOCHS, device, NUM_CLASSES)
 
-    for model_idx, model in enumerate(committee):
-        model.train()
-        optimizer = optim.Adam(model.parameters(), lr=0.001)
-        criterion = nn.CrossEntropyLoss()
-        dataloader = get_bootstrapped_dataloader(dataset, labeled_indices, BATCH_SIZE)
-
-        print(f"Training Model {model_idx+1}/{COMMITTEE_SIZE}...")
-        for epoch in range(EPOCHS):
-            epoch_loss = 0
-            correct = 0
-            total = 0
-
-            for batch_idx, (images, labels) in enumerate(dataloader):
-                images = images.to(device)
-                labels = labels.to(device)
-
-                optimizer.zero_grad()
-                outputs = model(images)
-                loss = criterion(outputs, labels)
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.item()
-
-                # Compute Accuracy
-                _, predicted = torch.max(outputs, 1)
-                correct += (predicted == labels).sum().item()
-                total += labels.size(0)
-
-            accuracy = (correct / total) * 100
-            print(f"  Model {model_idx+1} - Epoch {epoch+1}/{EPOCHS}, Loss: {epoch_loss:.4f}, Accuracy: {accuracy:.2f}%")
-
-    # Evaluate Final Accuracy of Committee
-    print("\nFinal Committee Accuracy After Training:")
-    for model_idx, model in enumerate(committee):
-        model.eval()
-        total_correct = 0
-        total_samples = 0
-
-        with torch.no_grad():
-            for images, labels in dataloader:
-                images, labels = images.to(device), labels.to(device)
-                outputs = model(images)
-                _, predicted = torch.max(outputs, 1)
-                total_correct += (predicted == labels).sum().item()
-                total_samples += labels.size(0)
-
-        final_accuracy = (total_correct / total_samples) * 100
-        print(f"  Model {model_idx+1} - Accuracy: {final_accuracy:.2f}%")
+    # Evaluate on held-out test set
+    test_accuracy = evaluate_on_test_set(dataset, test_indices, committee, BATCH_SIZE, device)
+    test_accuracies.append(test_accuracy)
 
     # Uncertainty Estimation (Variance-based QBC)
     print("\nEstimating uncertainty...")
@@ -122,14 +86,11 @@ for round in range(AL_ROUNDS):
             variance = np.var(committee_outputs, axis=0).sum(axis=1)  # Compute variance across models
             uncertain_samples.extend(zip(unlabeled_indices[:len(variance)], variance))
 
-    # Print top uncertain samples
     print(f"Top 5 most uncertain sample variances: {sorted([x[1] for x in uncertain_samples], reverse=True)[:5]}")
 
-    # Select most uncertain samples
     uncertain_samples.sort(key=lambda x: x[1], reverse=True)  # Sort by highest uncertainty
     selected_samples = [x[0] for x in uncertain_samples[:QUERY_SIZE]]
     
-    # Update labeled and unlabeled indices
     labeled_indices.extend(selected_samples)
     unlabeled_indices = [idx for idx in unlabeled_indices if idx not in selected_samples]
     
