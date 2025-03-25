@@ -36,16 +36,8 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-
 df = pd.read_csv('data/extracted_dataset.csv')
-
 dataset = DatasetClassifier(df, transform=transform)
-
-random.seed(333)
-num_samples = len(dataset)
-
-unlabeled_indices = list(range(num_samples))
-random.shuffle(unlabeled_indices)
 
 committee_accuracies = [[] for _ in COMMITTEES]
 
@@ -54,7 +46,11 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
     print(f'STARTING COMMITTEE {c_i+1} | MEMBER SIZE: {COMMITTEE_SIZE}')
     print('##############################################')
 
+    random.seed(333)
+    num_samples = len(dataset)
 
+    unlabeled_indices = list(range(num_samples))
+    random.shuffle(unlabeled_indices)
 
     test_set_size = int(num_samples * TEST_SET_RATIO)
     test_indices = unlabeled_indices[:test_set_size]  # Reserve test samples
@@ -62,15 +58,12 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
 
     labeled_indices = unlabeled_indices[:INITIAL_LABELS]
     unlabeled_indices = unlabeled_indices[INITIAL_LABELS:]
-
-
     
     print(f"Total samples: {num_samples}")
     print(f"Test set size (held-out): {len(test_indices)}")
     print(f"Initially labeled samples: {len(labeled_indices)}")
     print(f"Initially unlabeled samples: {len(unlabeled_indices)}")
     print('----------------------------------------------')
-
 
     test_accuracies = []  # Store test set accuracy over rounds
 
