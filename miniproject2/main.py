@@ -31,10 +31,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.ba
 print(f"Using device: {device}")
 
 transform = transforms.Compose([
+    transforms.Grayscale(num_output_channels=1),
     transforms.Resize((299, 299)),
-    transforms.Grayscale(num_output_channels=3),  # Ensure grayscale is converted to RGB
     transforms.ToTensor(),
 ])
+
 
 df = pd.read_csv('data/extracted_dataset.csv')
 
