@@ -36,25 +36,21 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-
 df = pd.read_csv('data/extracted_dataset.csv')
-
 dataset = DatasetClassifier(df, transform=transform)
 
-random.seed(333)
-num_samples = len(dataset)
-
-unlabeled_indices = list(range(num_samples))
-random.shuffle(unlabeled_indices)
-
-committee_accuracies = [[] * len(COMMITTEES)]
+committee_accuracies = [[] for _ in COMMITTEES]
 
 for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
     print('##############################################')
     print(f'STARTING COMMITTEE {c_i+1} | MEMBER SIZE: {COMMITTEE_SIZE}')
     print('##############################################')
 
+    random.seed(333)
+    num_samples = len(dataset)
 
+    unlabeled_indices = list(range(num_samples))
+    random.shuffle(unlabeled_indices)
 
     test_set_size = int(num_samples * TEST_SET_RATIO)
     test_indices = unlabeled_indices[:test_set_size]  # Reserve test samples
@@ -62,15 +58,12 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
 
     labeled_indices = unlabeled_indices[:INITIAL_LABELS]
     unlabeled_indices = unlabeled_indices[INITIAL_LABELS:]
-
-
     
     print(f"Total samples: {num_samples}")
     print(f"Test set size (held-out): {len(test_indices)}")
     print(f"Initially labeled samples: {len(labeled_indices)}")
     print(f"Initially unlabeled samples: {len(unlabeled_indices)}")
     print('----------------------------------------------')
-
 
     test_accuracies = []  # Store test set accuracy over rounds
 
@@ -87,19 +80,33 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
         # Uncertainty Estimation (Variance-based QBC)
         print("\nEstimating uncertainty...")
         uncertain_samples = []
+
         unlabeled_subset = Subset(dataset, unlabeled_indices)
         unlabeled_loader = DataLoader(unlabeled_subset, batch_size=BATCH_SIZE, shuffle=False)
-        
+
         for model in committee:
             model.eval()
-        
+
         with torch.no_grad():
-            for batch_idx, (images, _) in enumerate(unlabeled_loader):
+            start_idx = 0  # To map variance back to indices properly
+            for images, _ in unlabeled_loader:
                 images = images.to(device)
-                committee_outputs = [torch.softmax(model(images), dim=1).cpu().numpy() for model in committee]
-                committee_outputs = np.array(committee_outputs)  # Shape: (committee_size, batch_size, num_classes)
-                variance = np.var(committee_outputs, axis=0).sum(axis=1)  # Compute variance across models
-                uncertain_samples.extend(zip(unlabeled_indices[:len(variance)], variance))
+
+                # One pass per model, stack results directly (no CPU yet)
+                outputs = torch.stack([torch.softmax(model(images), dim=1) for model in committee])  # shape: (committee_size, batch_size, num_classes)
+
+                # Variance across committee dimension, then sum over class axis
+                variance = outputs.var(dim=0).sum(dim=1)  # shape: (batch_size,)
+
+                # Move variance to CPU only once, convert to numpy
+                variance = variance.cpu().numpy()
+
+                # Match back to the correct indices in the full unlabeled pool
+                batch_size_actual = len(variance)
+                batch_indices = unlabeled_indices[start_idx:start_idx + batch_size_actual]
+                start_idx += batch_size_actual
+
+                uncertain_samples.extend(zip(batch_indices, variance))
 
         print(f"Top 5 most uncertain sample variances: {sorted([x[1] for x in uncertain_samples], reverse=True)[:5]}")
 
@@ -114,7 +121,6 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
 
         if not unlabeled_indices:
             print("No more unlabeled data left. Stopping Active Learning.")
-            committee_accuracies[c_i].append(test_accuracies)
             break
 
     committee_accuracies[c_i].append(test_accuracies)
@@ -123,3 +129,10 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
     print(f'ENDING COMMITTEE {c_i} | INITIATING NEXT COMMITTEE')
     print('##############################################')
 
+df = pd.DataFrame(
+    data=np.array(committee_accuracies).T,
+    columns=[f"committee{i+1}" for i in range(len(committee_accuracies))],
+    index=[f"round{r+1}" for r in range(len(committee_accuracies[0]))]
+)
+
+df.to_csv('AL_results.csv')
