@@ -82,3 +82,15 @@ for round in range(AL_ROUNDS):
 print('##############################################')
 print('ENDING BASELINE MODEL')
 print('##############################################')
+
+# Convert the baseline_accuracies to DataFrame
+df_baseline = pd.DataFrame(
+    data=baseline_accuracies,  # Data is now directly the accuracies list
+    columns=["baseline"],      # The column name is "baseline"
+    index=[f"round{r+1}" for r in range(len(baseline_accuracies))]  # Index is round1, round2, etc.
+)
+
+# Save to CSV
+df_baseline.to_csv('AL_results_baseline.csv')
+
+print("Baseline results saved to AL_results_baseline.csv")
