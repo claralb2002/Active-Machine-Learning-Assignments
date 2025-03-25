@@ -80,19 +80,33 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
         # Uncertainty Estimation (Variance-based QBC)
         print("\nEstimating uncertainty...")
         uncertain_samples = []
+
         unlabeled_subset = Subset(dataset, unlabeled_indices)
         unlabeled_loader = DataLoader(unlabeled_subset, batch_size=BATCH_SIZE, shuffle=False)
-        
+
         for model in committee:
             model.eval()
-        
+
         with torch.no_grad():
-            for batch_idx, (images, _) in enumerate(unlabeled_loader):
+            start_idx = 0  # To map variance back to indices properly
+            for images, _ in unlabeled_loader:
                 images = images.to(device)
-                committee_outputs = [torch.softmax(model(images), dim=1).cpu().numpy() for model in committee]
-                committee_outputs = np.array(committee_outputs)  # Shape: (committee_size, batch_size, num_classes)
-                variance = np.var(committee_outputs, axis=0).sum(axis=1)  # Compute variance across models
-                uncertain_samples.extend(zip(unlabeled_indices[:len(variance)], variance))
+
+                # One pass per model, stack results directly (no CPU yet)
+                outputs = torch.stack([torch.softmax(model(images), dim=1) for model in committee])  # shape: (committee_size, batch_size, num_classes)
+
+                # Variance across committee dimension, then sum over class axis
+                variance = outputs.var(dim=0).sum(dim=1)  # shape: (batch_size,)
+
+                # Move variance to CPU only once, convert to numpy
+                variance = variance.cpu().numpy()
+
+                # Match back to the correct indices in the full unlabeled pool
+                batch_size_actual = len(variance)
+                batch_indices = unlabeled_indices[start_idx:start_idx + batch_size_actual]
+                start_idx += batch_size_actual
+
+                uncertain_samples.extend(zip(batch_indices, variance))
 
         print(f"Top 5 most uncertain sample variances: {sorted([x[1] for x in uncertain_samples], reverse=True)[:5]}")
 
