@@ -47,7 +47,7 @@ num_samples = len(dataset)
 unlabeled_indices = list(range(num_samples))
 random.shuffle(unlabeled_indices)
 
-committee_accuracies = [[] * len(COMMITTEES)]
+committee_accuracies = [[] for _ in COMMITTEES]
 
 for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
     print('##############################################')
@@ -114,7 +114,6 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
 
         if not unlabeled_indices:
             print("No more unlabeled data left. Stopping Active Learning.")
-            committee_accuracies[c_i].append(test_accuracies)
             break
 
     committee_accuracies[c_i].append(test_accuracies)
@@ -123,3 +122,10 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
     print(f'ENDING COMMITTEE {c_i} | INITIATING NEXT COMMITTEE')
     print('##############################################')
 
+df = pd.DataFrame(
+    data=np.array(committee_accuracies).T,
+    columns=[f"committee{i+1}" for i in range(len(committee_accuracies))],
+    index=[f"round{r+1}" for r in range(len(committee_accuracies[0]))]
+)
+
+df.to_csv('AL_results.csv')
