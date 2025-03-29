@@ -11,11 +11,11 @@ from modules.active_learning import evaluate_on_test_set, train_committee
 
 ##### PARAMETERS #####
 NUM_CLASSES = 4
-INITIAL_LABELS = 800
+INITIAL_LABELS = 600
 BATCH_SIZE = 32
 EPOCHS = 5 
-QUERY_SIZE = 400
-AL_ROUNDS = 5
+QUERY_SIZE = 200
+AL_ROUNDS = 20
 TEST_SET_RATIO = 0.1 
 ######################
 
