@@ -6,22 +6,17 @@ import numpy as np
 sns.set_theme(style="whitegrid", context="talk", palette="muted")
 
 
-def plot_committee_performance(res: pd.DataFrame, baseline: pd.DataFrame, title="Committee Performance over Rounds", normalize=False):
+def plot_committee_performance(res: pd.DataFrame, baseline: pd.DataFrame, title="Committee Performance over Rounds"):
     """
     Shows two subplots:
     - Top: Raw performance over rounds
-    - Bottom: Regression trendlines with slope annotations
-    If `normalize=True`, subtracts initial value to show relative improvement.
+    - Bottom: Regression trendlines
+    Includes slope summary legend box.
     """
 
     # --- Data Preparation ---
     res_plot = res.copy()
     baseline_plot = baseline.copy()
-
-    if normalize:
-        res_plot = res_plot.subtract(res_plot.iloc[0])  # Normalize each line to start at 0
-        baseline_plot["baseline"] = baseline_plot["baseline"] - baseline_plot["baseline"].iloc[0]
-        title += " (Normalized)"
 
     res_plot["Round"] = range(1, len(res_plot) + 1)
     res_melted = res_plot.melt(id_vars="Round", var_name="Committee", value_name="Performance")
@@ -29,7 +24,7 @@ def plot_committee_performance(res: pd.DataFrame, baseline: pd.DataFrame, title=
     baseline_plot["Round"] = range(1, len(baseline_plot) + 1)
 
     # --- Set up figure ---
-    fig, axes = plt.subplots(2, 1, figsize=(14, 12), sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=(14, 14), sharex=True)
 
     # === Plot 1: Raw Performance ===
     sns.lineplot(ax=axes[0], data=res_melted, x="Round", y="Performance", hue="Committee", marker="o")
@@ -50,35 +45,58 @@ def plot_committee_performance(res: pd.DataFrame, baseline: pd.DataFrame, title=
     # === Plot 2: Regression Trends ===
     x = res_plot["Round"]
     color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    slopes = {}
 
     for i, committee in enumerate(res_plot.columns.drop("Round")):
         y = res_plot[committee]
         z = np.polyfit(x, y, 1)
         p = np.poly1d(z)
         slope = z[0]
+        slopes[committee] = slope
         axes[1].plot(x, p(x), label=committee, color=color_cycle[i], linewidth=2)
 
-        # Annotate slope
-        axes[1].text(
-            x.iloc[-1] + 0.5, p(x.iloc[-1]),
-            f"↑ {slope:.2f}", fontsize=10,
-            color=color_cycle[i], va="center"
-        )
-
-    # Baseline regression
+    # --- Baseline regression ---
     y_base = baseline_plot["baseline"]
     z_base = np.polyfit(x, y_base, 1)
     p_base = np.poly1d(z_base)
     slope_base = z_base[0]
+    slopes["Baseline"] = slope_base
 
     axes[1].plot(x, p_base(x), label="Baseline", color="black", linestyle="--", linewidth=2.5)
-    axes[1].text(x.iloc[-1] + 0.5, p_base(x.iloc[-1]), f"↑ {slope_base:.2f}", fontsize=10, color="black", va="center")
+
+    # --- Average Committee regression ---
+    committee_columns = res_plot.columns.drop("Round")
+    y_avg = res_plot[committee_columns].mean(axis=1)
+    z_avg = np.polyfit(x, y_avg, 1)
+    p_avg = np.poly1d(z_avg)
+    slope_avg = z_avg[0]
+    slopes["Avg. Committee"] = slope_avg
+
+    axes[1].plot(x, p_avg(x), label="Avg. Committee", color="gray", linestyle="--", linewidth=2.5)
 
     axes[1].set_title(f"{title} — Linear Trend")
     axes[1].set_xlabel("Round")
     axes[1].set_ylabel("Performance")
-    axes[1].legend(title="Committee")
-    plt.tight_layout()
+
+    # --- Build slope legend box ---
+    slope_text = "Slope Coefficients:\n" + "\n".join(
+        f"{name: <15} {slope:.2f}" for name, slope in slopes.items()
+    )
+
+    # Place text box in the figure, not the subplot
+    # fig.text(0.5, 0.03, slope_text, ha='center', fontsize=11, family='monospace', bbox=dict(facecolor='white', edgecolor='gray'))
+
+    axes[1].text(
+    0.98, 0.02,  # Near bottom-right corner
+    slope_text,
+    transform=axes[1].transAxes,
+    ha='right', va='bottom',
+    fontsize=10, family='monospace',
+    bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
+    )
+
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])  # leave space for slope text
     plt.savefig('results_lineplot.png')
     plt.show()
 
