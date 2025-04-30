@@ -17,13 +17,13 @@ from modules.active_learning import evaluate_on_test_set, train_committee
 
 ##### PARAMETERS #####
 NUM_CLASSES = 4
-INITIAL_LABELS = 800
+INITIAL_LABELS = 600
 BATCH_SIZE = 32
-EPOCHS = 5 
-QUERY_SIZE = 400
-AL_ROUNDS = 5
-COMMITTEES = [3,5,9,17] 
-TEST_SET_RATIO = 0.1 
+EPOCHS = 5
+QUERY_SIZE = 200
+AL_ROUNDS = 20
+COMMITTEES = [3,5,9,17]
+TEST_SET_RATIO = 0.1
 ######################
 
 
@@ -123,7 +123,7 @@ for c_i, COMMITTEE_SIZE in enumerate(COMMITTEES):
             print("No more unlabeled data left. Stopping Active Learning.")
             break
 
-    committee_accuracies[c_i].append(test_accuracies)
+    committee_accuracies[c_i] = test_accuracies
 
     print('----------------------------------------------')
     print(f'ENDING COMMITTEE {c_i} | INITIATING NEXT COMMITTEE')

@@ -11,11 +11,11 @@ from modules.active_learning import evaluate_on_test_set, train_committee
 
 ##### PARAMETERS #####
 NUM_CLASSES = 4
-INITIAL_LABELS = 800
+INITIAL_LABELS = 600
 BATCH_SIZE = 32
 EPOCHS = 5 
-QUERY_SIZE = 400
-AL_ROUNDS = 5
+QUERY_SIZE = 200
+AL_ROUNDS = 20
 TEST_SET_RATIO = 0.1 
 ######################
 
@@ -82,3 +82,15 @@ for round in range(AL_ROUNDS):
 print('##############################################')
 print('ENDING BASELINE MODEL')
 print('##############################################')
+
+# Convert the baseline_accuracies to DataFrame
+df_baseline = pd.DataFrame(
+    data=baseline_accuracies,  # Data is now directly the accuracies list
+    columns=["baseline"],      # The column name is "baseline"
+    index=[f"round{r+1}" for r in range(len(baseline_accuracies))]  # Index is round1, round2, etc.
+)
+
+# Save to CSV
+df_baseline.to_csv('AL_results_baseline.csv')
+
+print("Baseline results saved to AL_results_baseline.csv")
